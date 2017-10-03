@@ -1,76 +1,57 @@
 #!/bin/sh
 
-lock()
+schemaspath="/usr/share/glib-2.0/schemas/"
+profileuser="/etc/dconf/profile/user"
+settings="/etc/dconf/db/local.d/settings"
+settingslocks="/etc/dconf/db/local.d/locks/settings"
+
+processfile # ($1) takes 1 parameter [ name of the file ]
 {
-    mode=$DESKTOP_SESSION
-    file3="/usr/share/glib-2.0/schemas/org.$mode.desktop.background.gschema.xml"
-    if [ "$mode" == "default" ]
-    then
-        mode="mate"
-        file3="/usr/share/glib-2.0/schemas/org.$mode.background.gschema.xml"
-    fi
-    echo "Your mode is $mode."
+	# split name to dirs
+	path=""
+	dirs=$(echo $1 | tr "." "\n")
+	for dir in $dirs
+	do
+	    path="$path$dir/"
+	done
 
-    echo -e "user-db:user\nsystem-db:local" > /etc/dconf/profile/user
-    mkdir -p /etc/dconf/db/local.d/locks
-
-    file1=/etc/dconf/db/local.d/00_background
-    file2=/etc/dconf/db/local.d/locks/00_background
-
-    # create and erase files
-    echo -n "" > file1
-    echo -n "" > file2
-
-    if [ "$mode" == "mate" ]
-    then
-        echo [org/$mode/background] >> file1
-    else
-        echo [org/$mode/desktop/background] >> file1
-    fi
-
-    while read -r line
-        do
-        tmpline=$(sed -n '/^<key name/{ s/[^"]*"\([^"]*\)".*/\1/; p }' <<< $line)
-        echo -n $tmpline >> file1
-        if [ "$tmpline" != "" ]
+	# prepare settings file [ %? deletes last symbol "/"]
+	echo "[${path%?}]" >> settings
+    
+	while read -r line
+    do
+		# search content in strings like name="..."
+       	readline=$(sed -n '/^name/{ s/[^"]*"\([^"]*\)".*/\1/; p }' <<< $line)
+       	echo -n $readline >> settings
+        if [ "$readline" != "" ]
         then 
-            echo /org/$mode/desktop/background/$tmpline >> file2
+            echo "/$path$readline" >> settingslocks
         fi
-        sed -n '/^<default/{ s/[^"]*>\([^<]*\)<.*/=\1/; p }' <<< $line >> file1
-    done < file3
+		# search content in strings like <default>...</default>
+        sed -n '/^<default/{ s/[^"]*>\([^<]*\)<.*/=\1/; p }' <<< $line >> settings
+    done < "$schemaspath$1.gschema.xml"
+}
+# end processfile --- --- --- --- ---
+
+lock # ($1) takes 1 parameter [ type of lock: all, interactive ]
+{
+	mkdir -p /etc/dconf/db/local.d/locks
+	echo -e "user-db:user\nsystem-db:local" > $profileuser
+    echo -n "" > settings
+    echo -n "" > settingslocks
+
+	if [ $1 == "all" ]
+	then
+		for file in $(gsettings list-schemas) 
+		do
+   			processfile $file 
+		done
+	elif [ $1 == "interactive"] 
+		
+	fi
+    
     dconf update
     echo "Dconf locked successfully!"
     exit 0
 }
-
-unlock()
-{
-    rm -f /etc/dconf/profile/user
-    rm -rf /etc/dconf/db/*
-    dconf update
-    echo "Dconf unlocked!"
-    exit 0
-}
-
-### MAIN () ###
-# Check the script is being run by root
-if [ "$(id -u)" != "0" ]; then
-   echo "This script must be run as root!"
-   exit 1
-fi
-
-case $1 in
-     -l|--lock)      
-          lock
-          ;;
-     -u|--unlock)
-          unlock
-          ;; 
-     *)
-          echo -e \
-"Usage: command argument
-Arguments:
-        -l (--lock) - to lock dconf
-        -u (--unlock) - to unlock dconf"
-          ;;
-esac
+# end lock --- --- --- --- ---
