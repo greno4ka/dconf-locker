@@ -1,0 +1,76 @@
+#!/bin/sh
+
+lock()
+{
+    mode=$DESKTOP_SESSION
+    file3="/usr/share/glib-2.0/schemas/org.$mode.desktop.background.gschema.xml"
+    if [ "$mode" == "default" ]
+    then
+        mode="mate"
+        file3="/usr/share/glib-2.0/schemas/org.$mode.background.gschema.xml"
+    fi
+    echo "Your mode is $mode."
+
+    echo -e "user-db:user\nsystem-db:local" > /etc/dconf/profile/user
+    mkdir -p /etc/dconf/db/local.d/locks
+
+    file1=/etc/dconf/db/local.d/00_background
+    file2=/etc/dconf/db/local.d/locks/00_background
+
+    # create and erase files
+    echo -n "" > file1
+    echo -n "" > file2
+
+    if [ "$mode" == "mate" ]
+    then
+        echo [org/$mode/background] >> file1
+    else
+        echo [org/$mode/desktop/background] >> file1
+    fi
+
+    while read -r line
+        do
+        tmpline=$(sed -n '/^<key name/{ s/[^"]*"\([^"]*\)".*/\1/; p }' <<< $line)
+        echo -n $tmpline >> file1
+        if [ "$tmpline" != "" ]
+        then 
+            echo /org/$mode/desktop/background/$tmpline >> file2
+        fi
+        sed -n '/^<default/{ s/[^"]*>\([^<]*\)<.*/=\1/; p }' <<< $line >> file1
+    done < file3
+    dconf update
+    echo "Dconf locked successfully!"
+    exit 0
+}
+
+unlock()
+{
+    rm -f /etc/dconf/profile/user
+    rm -rf /etc/dconf/db/*
+    dconf update
+    echo "Dconf unlocked!"
+    exit 0
+}
+
+### MAIN () ###
+# Check the script is being run by root
+if [ "$(id -u)" != "0" ]; then
+   echo "This script must be run as root!"
+   exit 1
+fi
+
+case $1 in
+     -l|--lock)      
+          lock
+          ;;
+     -u|--unlock)
+          unlock
+          ;; 
+     *)
+          echo -e \
+"Usage: command argument
+Arguments:
+        -l (--lock) - to lock dconf
+        -u (--unlock) - to unlock dconf"
+          ;;
+esac
