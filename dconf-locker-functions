@@ -25,7 +25,7 @@ processfile() # ($1) takes 1 parameter [ name of the file ]
             
             for ((j=0; j < ${#names[*]}; j++)); do
                 echo "${names[$j]}=${values[$j]}" >> $settings
-                echo $path${names[$j]} >> $settingslocks       
+                echo "/$path${names[$j]}" >> $settingslocks
             done
         done
     fi
@@ -58,8 +58,8 @@ lock() # ($1) takes 1 parameter [ type of lock: all, list ]
 
 unlock()
 {
-    rm -f $profileuser
-    rm -rf /etc/dconf/db/*
+    rm -f $profileuser /etc/dconf/db/local
+    rm -rf /etc/dconf/db/local.d
     dconf update
     echo "Dconf unlocked!"
     exit 0
