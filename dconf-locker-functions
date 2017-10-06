@@ -1,0 +1,67 @@
+#!/bin/bash -efu
+
+argc=$#
+argv=("$@")
+# usage: ${argv[0]}
+
+schemaspath="/usr/share/glib-2.0/schemas/"
+profileuser="/etc/dconf/profile/user"
+settings="/etc/dconf/db/local.d/settings"
+settingslocks="/etc/dconf/db/local.d/locks/settings"
+
+processfile() # ($1) takes 1 parameter [ name of the file ]
+{
+    IFS=' ' # Internal Field Separator
+    currentschema="$schemaspath$1.gschema.xml"
+    if [[ -f $currentschema ]]; then # for case of simple .xml files
+        read -r -a pathes <<< $(sed -n 's/path="\/\|"//gp' <<< $(xmllint --xpath '//schemalist/schema/@path' $currentschema 2>/dev/null))
+        for ((i=0; i < ${#pathes[*]}; i++)); do
+            path=${pathes[$i]}
+            echo "Processing: [${path%?}]"    
+            echo "[${path%?}]" >> $settings
+
+            read -r -a names  <<< $(sed -n 's/name="\|"/ /gp'   <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/@name" $currentschema 2>/dev/null))
+            read -r -a values <<< $(sed -n 's/<*.default>/ /gp' <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/default" $currentschema 2>/dev/null))
+            
+            for ((j=0; j < ${#names[*]}; j++)); do
+                echo "${names[$j]}=${values[$j]}" >> $settings
+                echo $path${names[$j]} >> $settingslocks       
+            done
+        done
+    fi
+}
+# end processfile --- --- --- --- ---
+
+lock() # ($1) takes 1 parameter [ type of lock: all, list ]
+{
+    # create nessesary files
+    mkdir -p /etc/dconf/db/local.d/locks
+    echo -e "user-db:user\nsystem-db:local" > $profileuser
+    echo -n "" > $settings
+    echo -n "" > $settingslocks
+
+    if [[ $1 == "all" ]]; then
+        for file in $(ls $schemaspath); do
+            processfile ${file%.gschema.xml} 
+        done
+    elif [[ $1 == "list" ]]; then
+        for ((i=1; i < $argc; i++)); do
+            processfile ${argv[$i]%.gschema.xml}
+        done        
+    fi
+    
+    dconf update
+    echo "Dconf locked successfully!"
+    exit 0
+}
+# end lock --- --- --- --- ---
+
+unlock()
+{
+    rm -f $profileuser
+    rm -rf /etc/dconf/db/*
+    dconf update
+    echo "Dconf unlocked!"
+    exit 0
+}
+# end unlock --- --- --- --- ---
