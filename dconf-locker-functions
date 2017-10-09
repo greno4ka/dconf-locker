@@ -1,9 +1,5 @@
 #!/bin/bash -efu
 
-argc=$#
-argv=("$@")
-# usage: ${argv[0]}
-
 schemaspath="/usr/share/glib-2.0/schemas/"
 profileuser="/etc/dconf/profile/user"
 settings="/etc/dconf/db/local.d/settings"
@@ -34,7 +30,7 @@ processfile() # ($1) takes 1 parameter [ name of the file ]
 }
 # end processfile --- --- --- --- ---
 
-lock() # ($1) takes 1 parameter [ type of lock: all, list ]
+lock() # ($1 $2 $3) takes 1 parameter [ type of lock: all, list ]
 {
     # create nessesary files
     mkdir -p /etc/dconf/db/local.d/locks
@@ -47,7 +43,9 @@ lock() # ($1) takes 1 parameter [ type of lock: all, list ]
             processfile ${file%.gschema.xml} 
         done
     elif [[ $1 == "list" ]]; then
-        for ((i=1; i < $argc; i++)); do
+	local argc=$(( 2 + $2 )) # magic number 2: 1 - type of lock ; 2 - argc
+	local argv=("$@")
+        for ((i=4; i < $argc; i++)); do # magic number 4:  1 - type of lock ; 2 - argc; 3 - "-ll"; 4 - first file...
             processfile ${argv[$i]%.gschema.xml}
         done        
     fi
