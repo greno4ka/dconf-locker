@@ -8,29 +8,34 @@ settingslocks="/etc/dconf/db/local.d/locks/settings"
 processfile() # ($1) takes 1 parameter [ name of the file ]
 {
     IFS=' ' # Internal Field Separator
-    currentschema="$schemaspath$1.gschema.xml"
-    if [[ -f $currentschema ]]; then # for case of simple .xml files
-        read -r -a pathes <<< $(sed -n 's/path="\/\|"//gp' <<< $(xmllint --xpath '//schemalist/schema/@path' $currentschema 2>/dev/null))
-        for (( i=0; i < ${#pathes[*]}; i++ )); do
-            path=${pathes[$i]}
-            echo "Processing: [${path%?}]"
-            echo "[${path%?}]" >> $settings
+    if [[ $1 != ca.desrt.dconf-editor ]]; then # this file contains
+        currentschema="$schemaspath$1.gschema.xml"
+        if [[ -f $currentschema ]]; then # for case of simple .xml files
+            read -r -a pathes <<< $(sed -n 's/path="\/\|"//gp' <<< $(xmllint --xpath '//schemalist/schema/@path' $currentschema 2>/dev/null))
+            for (( i=0; i < ${#pathes[*]}; i++ )); do
+                path=${pathes[$i]}
+                echo "Processing: [${path%?}]"
+                echo "[${path%?}]" >> $settings
 
-            IFS=' ' # Internal Field Separator
-            read -r -a names <<< $(sed -n 's/name="\|"/ /gp' <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/@name" $currentschema 2>/dev/null))
-            IFS=' ' # Internal Field Separator
-            read -r -a values <<< $(sed -n 's/<default[^>]*>\|<\/default>/ /gp' \
-            <<< $(sed -n 's/ /\?/g; p' <<< $(sed -n 's/\[[^<]*\]/~/g; p' \
-            <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/default" $currentschema 2>/dev/null))))
+                IFS=' ' # Internal Field Separator
+                read -r -a names <<< $(sed -n 's/name="\|"/ /gp' <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/@name" $currentschema 2>/dev/null))
+                IFS=' ' # Internal Field Separator
+                # remove [ lists ] by replacing them on ~
+                # substitute ? instead of spaces for correct transfer of 'strings with spaces'
+                read -r -a values <<< $(sed -n 's/<default[^>]*>\|<\/default>/ /gp' \
+                <<< $(sed -n 's/ /\?/g; p' <<< $(sed -n 's/\[[^<]*\]/~/g; p' \
+                <<< $(xmllint --nocdata --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/default" $currentschema 2>/dev/null))))
 
-           for (( j=0; j < ${#values[*]}; j++ )); do
-                if [[ ${values[$j]} != "~" ]]; then
-                    valueJ=$(sed -n "s/\?/ /g; p" <<< ${values[$j]} )
-                    echo "${names[$j]}=$valueJ" >> $settings
-                    echo "/$path${names[$j]}" >> $settingslocks
-                fi
+               for (( j=0; j < ${#values[*]}; j++ )); do
+                    if [[ ${values[$j]} != "~" ]] && \
+                       [[ ${values[$j]} != "nothing" ]]; then # dconf doesnt know this value
+                        valueJ=$(sed -n 's/\?/ /g; p' <<< ${values[$j]} )
+                        echo "${names[$j]}=$valueJ" >> $settings
+                        echo "/$path${names[$j]}" >> $settingslocks
+                    fi
+                done
             done
-        done
+        fi
     fi
 }
 # end processfile --- --- --- --- ---
