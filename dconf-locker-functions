@@ -13,15 +13,20 @@ processfile() # ($1) takes 1 parameter [ name of the file ]
         read -r -a pathes <<< $(sed -n 's/path="\/\|"//gp' <<< $(xmllint --xpath '//schemalist/schema/@path' $currentschema 2>/dev/null))
         for (( i=0; i < ${#pathes[*]}; i++ )); do
             path=${pathes[$i]}
-            echo "Processing: [${path%?}]"    
+            echo "Processing: [${path%?}]"
             echo "[${path%?}]" >> $settings
 
-            read -r -a names  <<< $(sed -n 's/name="\|"/ /gp'   <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/@name" $currentschema 2>/dev/null))
-            read -r -a values <<< $(sed -n "s/<default[^>]*>\|<\/default>/ /gp" <<< $(sed -n "s/\[[^<]*\]/~/g; p" <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/default" $currentschema 2>/dev/null)))
+            IFS=' ' # Internal Field Separator
+            read -r -a names <<< $(sed -n 's/name="\|"/ /gp' <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/@name" $currentschema 2>/dev/null))
+            IFS=' ' # Internal Field Separator
+            read -r -a values <<< $(sed -n 's/<default[^>]*>\|<\/default>/ /gp' \
+            <<< $(sed -n 's/ /\?/g; p' <<< $(sed -n 's/\[[^<]*\]/~/g; p' \
+            <<< $(xmllint --xpath "//schemalist/schema[@path=\"/${pathes[$i]}\"]/key/default" $currentschema 2>/dev/null))))
 
-            for (( j=0; j < ${#values[*]}; j++ )); do
+           for (( j=0; j < ${#values[*]}; j++ )); do
                 if [[ ${values[$j]} != "~" ]]; then
-                    echo "${names[$j]}=${values[$j]}" >> $settings
+                    valueJ=$(sed -n "s/\?/ /g; p" <<< ${values[$j]} )
+                    echo "${names[$j]}=$valueJ" >> $settings
                     echo "/$path${names[$j]}" >> $settingslocks
                 fi
             done
@@ -40,16 +45,16 @@ lock() # ($1 $2 $3) takes 1 parameter [ type of lock: all, list ]
 
     if [[ $1 == "all" ]]; then
         for file in $(ls $schemaspath); do
-            processfile ${file%.gschema.xml} 
+            processfile ${file%.gschema.xml}
         done
     elif [[ $1 == "list" ]]; then
-	local argc=$(( 2 + $2 )) # magic number 2: 1 - type of lock ; 2 - argc
-	local argv=("$@")
+        local argc=$(( 2 + $2 )) # magic number 2: 1 - type of lock ; 2 - argc
+        local argv=("$@")
         for ((i=4; i < $argc; i++)); do # magic number 4:  1 - type of lock ; 2 - argc; 3 - "-ll"; 4 - first file...
             processfile ${argv[$i]%.gschema.xml}
-        done        
+        done
     fi
-    
+
     dconf update
     echo "Dconf locked successfully!"
     exit 0
