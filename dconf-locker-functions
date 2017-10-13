@@ -1,15 +1,20 @@
 #!/bin/bash -efu
 
+# these paths cant vary
 schemaspath="/usr/share/glib-2.0/schemas/"
 profileuser="/etc/dconf/profile/user"
-settings="/etc/dconf/db/local.d/settings"
-settingslocks="/etc/dconf/db/local.d/locks/settings"
 
 processfile() # ($1) takes 1 parameter [ name of the file ]
 {
     IFS=' ' # Internal Field Separator
     if [[ $1 != ca.desrt.dconf-editor ]]; then # this file contains
         currentschema="$schemaspath$1.gschema.xml"
+        settings="/etc/dconf/db/local.d/$1"
+        settingslocks="/etc/dconf/db/local.d/locks/$1"
+        # create files
+        echo -n "" > $settings
+        echo -n "" > $settingslocks
+
         if [[ -f $currentschema ]]; then # for case of simple .xml files
             read -r -a pathes <<< $(sed -n 's/path="\/\|"//gp' <<< $(xmllint --xpath '//schemalist/schema/@path' $currentschema 2>/dev/null))
             for (( i=0; i < ${#pathes[*]}; i++ )); do
@@ -40,14 +45,11 @@ processfile() # ($1) takes 1 parameter [ name of the file ]
 }
 # end processfile --- --- --- --- ---
 
-lock() # ($1 $2 $3) takes 1 parameter [ type of lock: all, list ]
+lock() # ($1 $2 $3) takes 3 parameters [ type of lock: all, list ] [ argc ] [ argv ]
 {
-    # create nessesary files
+    # anyway create this
     mkdir -p /etc/dconf/db/local.d/locks
     echo -e "user-db:user\nsystem-db:local" > $profileuser
-    echo -n "" > $settings
-    echo -n "" > $settingslocks
-
     if [[ $1 == "all" ]]; then
         for file in $(ls $schemaspath); do
             processfile ${file%.gschema.xml}
@@ -55,8 +57,8 @@ lock() # ($1 $2 $3) takes 1 parameter [ type of lock: all, list ]
     elif [[ $1 == "list" ]]; then
         local argc=$(( 2 + $2 )) # magic number 2: 1 - type of lock ; 2 - argc
         local argv=("$@")
-        for ((i=4; i < $argc; i++)); do # magic number 4:  1 - type of lock ; 2 - argc; 3 - "-ll"; 4 - first file...
-            processfile ${argv[$i]%.gschema.xml}
+        for ((arg=3; arg < $argc; arg++)); do # magic number 3:  0 - type of lock ; 1 - argc; 2 - "-ll"; 3 - first file...
+             processfile ${argv[$arg]%.gschema.xml}
         done
     fi
 
@@ -66,10 +68,28 @@ lock() # ($1 $2 $3) takes 1 parameter [ type of lock: all, list ]
 }
 # end lock --- --- --- --- ---
 
-unlock()
+unlock() # ($1 $2 $3) takes 3 parameters [ type of lock: all, list ] [ argc ] [ argv ]
 {
-    rm -f $profileuser /etc/dconf/db/local
-    rm -rf /etc/dconf/db/local.d
+    basepath=/etc/dconf/db/local.d
+
+    if [[ $1 == "all" ]]; then
+        for file in $(ls $basepath); do
+            rm -rf $basepath/$file $basepath/locks/$file
+        done
+    elif [[ $1 == "list" ]]; then
+        local argc=$(( 2 + $2 )) # magic number 2: 1 - type of lock ; 2 - argc
+        local argv=("$@")
+        for ((i=3; i < $argc; i++)); do # magic number 3:  0 - type of lock ; 1 - argc; 2 - "-ll"; 3 - first file...
+            rm -f $basepath/${argv[$i]%.gschema.xml} $basepath/locks/${argv[$i]%.gschema.xml}
+        done
+    fi
+
+    # Total clean
+    if ! [[ -d /etc/dconf/db/local.d/locks/ ]]; then # test if directory exists [if it's empty - it's useless]
+        rm -f $profileuser /etc/dconf/db/local
+        rm -rf /etc/dconf/db/local.d
+    fi
+
     dconf update
     echo "Dconf unlocked!"
     exit 0

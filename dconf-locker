@@ -14,7 +14,9 @@ Arguments:
         -la (--lockall) - to lock all dconf configurations
         -ll (--locklist) - to lock a list of dconf configurations
                         example: command -ll schema1 schema2 (without path and .gschema.xml)
-        -u (--unlock) - to unlock all dconf configurations"
+        -ua (--unlockall) - to unlock all dconf configurations
+        -ul (--unlocklist) - to unlock list of dconf configurations
+                        example: command -ll schema1 schema2 (without path and .gschema.xml)"
 }
 
 # Check the script is being run by root
@@ -33,14 +35,21 @@ case $1 in
         ;;
     -ll|--locklist)
         if [[ $argc > 1 ]]; then
-           lock "list" $argc ${argv[*]}
+            lock "list" $argc ${argv[*]}
         else
             printHelpMessage
         fi
         ;;
-    -u|--unlock)
+    -ua|--unlockall)
         if [[ $argc == 1 ]]; then
-            unlock
+            unlock "all"
+        else
+            printHelpMessage
+        fi
+        ;;
+    -ul|--unlocklist)
+        if [[ $argc > 1 ]]; then
+            unlock "list" $argc ${argv[*]}
         else
             printHelpMessage
         fi
