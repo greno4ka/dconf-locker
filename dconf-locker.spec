@@ -30,3 +30,5 @@ install -Dp -m744 %name-functions %buildroot%_bindir/%name-functions
 %_bindir/*
 
 %changelog
+* Mon Oct 16 2017 Grigory Ustinov <grenka@altlinux.org> 1.0-alt1
+- Initial build for Sisyphus.
