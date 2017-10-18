@@ -12,26 +12,26 @@ processfile() # ($1) takes 1 parameter [ name of the file ]
         settings="/etc/dconf/db/local.d/$1"
         settingslocks="/etc/dconf/db/local.d/locks/$1"
         # create files
-        echo -n "" > $settings
-        echo -n "" > $settingslocks
+        echo -n "" > "$settings"
+        echo -n "" > "$settingslocks"
 
         if [[ -f $currentschema ]]; then # for case of simple .xml files
-            for path in $(xmllint --xpath '//schemalist/schema/@path' $currentschema 2>/dev/null | sed -n 's/path="\/\|"//gp'); do
+            for path in $(xmllint --xpath '//schemalist/schema/@path' "$currentschema" 2>/dev/null | sed -n 's/path="\/\|"//gp'); do
                 echo "Processing: [${path%?}]"
-                echo "[${path%?}]" >> $settings
+                echo "[${path%?}]" >> "$settings"
 
-                read -r -a names <<< $(xmllint --xpath "//schemalist/schema[@path=\"/$path\"]/key/@name" $currentschema 2>/dev/null | sed -n 's/name="\|"/ /gp')
+                names=($(xmllint --xpath "//schemalist/schema[@path=\"/$path\"]/key/@name" "$currentschema" 2>/dev/null | sed -n 's/name="\|"/ /gp'))
                 # remove [ lists ] by replacing them on ~
                 # substitute ? instead of spaces for correct transfer of 'strings with spaces'
-                read -r -a values <<< $(xmllint --nocdata --xpath "//schemalist/schema[@path=\"/$path\"]/key/default" $currentschema 2>/dev/null | \
-                sed -n 's/\[[^<]*\]/~/g; s/ /\?/g; s/<default[^>]*>\|<\/default>/ /gp')
+                values=($(xmllint --nocdata --xpath "//schemalist/schema[@path=\"/$path\"]/key/default" "$currentschema" 2>/dev/null | \
+                sed -n 's/\[[^<]*\]/~/g; s/ /\?/g; s/<default[^>]*>\|<\/default>/ /gp'))
 
                 for (( j=0; j < ${#values[*]}; j++ )); do
                     if [[ ${values[$j]} != "~" ]] && \
                        [[ ${values[$j]} != "nothing" ]]; then # dconf doesnt know this value
-                        valueJ=$(sed -n 's/\?/ /g; p' <<< ${values[$j]} )
-                        echo "${names[$j]}=$valueJ" >> $settings
-                        echo "/$path${names[$j]}" >> $settingslocks
+                        valueJ=$(sed -n 's/\?/ /g; p' <<< "${values[$j]}" )
+                        echo "${names[$j]}=$valueJ" >> "$settings"
+                        echo "/$path${names[$j]}" >> "$settingslocks"
                     fi
                 done
             done
@@ -44,16 +44,16 @@ lock() # ($1 $2 $3) takes 3 parameters [ type of lock: all, list ] [ argc ] [ ar
 {
     # anyway create this
     mkdir -p /etc/dconf/db/local.d/locks
-    echo -e "user-db:user\nsystem-db:local" > $profileuser
+    echo -e "user-db:user\nsystem-db:local" > "$profileuser"
     if [[ $1 == "all" ]]; then
-        for file in $(ls $schemaspath); do
-            processfile ${file%.gschema.xml}
+        for file in "$schemaspath"/* ; do
+            processfile "${file%.gschema.xml}"
         done
     elif [[ $1 == "list" ]]; then
         local argc=$(( 2 + $2 )) # magic number 2: 1 - type of lock ; 2 - argc
         local argv=("$@")
-        for ((arg=3; arg < $argc; arg++)); do # magic number 3:  0 - type of lock ; 1 - argc; 2 - "-ll"; 3 - first file...
-             processfile ${argv[$arg]%.gschema.xml}
+        for ((arg=3; arg < argc; arg++)); do # magic number 3:  0 - type of lock ; 1 - argc; 2 - "-ll"; 3 - first file...
+             processfile "${argv[$arg]%.gschema.xml}"
         done
     fi
 
@@ -68,14 +68,14 @@ unlock() # ($1 $2 $3) takes 3 parameters [ type of lock: all, list ] [ argc ] [ 
     basepath=/etc/dconf/db/local.d
 
     if [[ $1 == "all" ]]; then
-        for file in $(ls $basepath); do
-            rm -rf $basepath/$file $basepath/locks/$file
+        for file in "$basepath"/* ; do
+            rm -rf "${basepath:?}/$file" "${basepath}/locks/$file"
         done
     elif [[ $1 == "list" ]]; then
         local argc=$(( 2 + $2 )) # magic number 2: 1 - type of lock ; 2 - argc
         local argv=("$@")
-        for ((i=3; i < $argc; i++)); do # magic number 3:  0 - type of lock ; 1 - argc; 2 - "-ll"; 3 - first file...
-            rm -f $basepath/${argv[$i]%.gschema.xml} $basepath/locks/${argv[$i]%.gschema.xml}
+        for ((i=3; i < argc; i++)); do # magic number 3:  0 - type of lock ; 1 - argc; 2 - "-ll"; 3 - first file...
+            rm -f "$basepath/${argv[$i]%.gschema.xml}" "$basepath/locks/${argv[$i]%.gschema.xml}"
         done
     fi
 
